@@ -2,7 +2,7 @@ import asyncio
 import os
 from collections import defaultdict
 from itertools import islice, repeat
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import msgspec
 
@@ -53,7 +53,8 @@ class RayGPUExecutor(DistributedGPUExecutor):
                 "VLLM_USE_RAY_COMPILED_DAG=1")
 
         assert self.uses_ray
-        placement_group = self.parallel_config.placement_group
+        placement_group: Optional[PlacementGroup] = (
+            self.parallel_config.placement_group)
 
         # Disable Ray usage stats collection.
         ray_usage = os.environ.get("RAY_USAGE_STATS_ENABLED", "0")
@@ -197,7 +198,7 @@ class RayGPUExecutor(DistributedGPUExecutor):
         self.workers = sorted(self.workers, key=sort_by_driver_then_worker_ip)
 
         # Get the set of GPU IDs used on each node.
-        worker_node_and_gpu_ids = []
+        worker_node_and_gpu_ids: List[Tuple[str, List[Union[int, str]]]] = []
         for worker in [self.driver_dummy_worker] + self.workers:
             if worker is None:
                 # driver_dummy_worker can be None when using ray spmd worker.
@@ -205,9 +206,10 @@ class RayGPUExecutor(DistributedGPUExecutor):
             worker_node_and_gpu_ids.append(
                 ray.get(worker.get_node_and_gpu_ids.remote()) \
             ) # type: ignore
-
-        node_workers = defaultdict(list)  # node id -> list of worker ranks
-        node_gpus = defaultdict(list)  # node id -> list of gpu ids
+        # node id -> list of worker ranks
+        node_workers = defaultdict[str, list[int]](list)
+        # node id -> list of gpu ids
+        node_gpus = defaultdict[str, list[Union[int, str]]](list)
 
         for i, (node_id, gpu_ids) in enumerate(worker_node_and_gpu_ids):
             node_workers[node_id].append(i)
